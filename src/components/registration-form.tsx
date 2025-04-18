@@ -1,56 +1,89 @@
 "use client";
 
-import {Button} from "@/components/ui/button";
-import {Input} from "@/components/ui/input";
-import {useState} from "react";
-import {useToast} from "@/hooks/use-toast";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { useState } from "react";
+import { useToast } from "@/hooks/use-toast";
+import {
+  Form,
+  FormControl,
+  FormDescription,
+  FormField,
+  FormItem,
+  FormLabel,
+  FormMessage,
+} from "@/components/ui/form";
+import { useForm } from "react-hook-form";
+import { z } from "zod";
+import { zodResolver } from "@hookform/resolvers/zod";
+
+const formSchema = z.object({
+  username: z.string().min(2, {
+    message: "Username must be at least 2 characters.",
+  }),
+  password: z.string().min(8, {
+    message: "Password must be at least 8 characters.",
+  }),
+});
 
 const RegistrationForm = () => {
-  const [username, setUsername] = useState("");
-  const [password, setPassword] = useState("");
-  const {toast} = useToast();
+  const { toast } = useToast();
 
-  const handleSubmit = async (event: React.FormEvent) => {
-    event.preventDefault();
-    // Basic validation
-    if (!username || !password) {
-      toast({
-        title: "Error",
-        description: "Please fill in all fields.",
-        variant: "destructive",
-      });
-      return;
-    }
+  const form = useForm<z.infer<typeof formSchema>>({
+    resolver: zodResolver(formSchema),
+    defaultValues: {
+      username: "",
+      password: "",
+    },
+  });
 
+  const onSubmit = async (values: z.infer<typeof formSchema>) => {
     // Simulate successful registration
     toast({
       title: "Success",
-      description: `User ${username} registered successfully!`,
+      description: `User ${values.username} registered successfully!`,
     });
-    setUsername("");
-    setPassword("");
+    form.reset();
   };
 
   return (
-    <form
-      onSubmit={handleSubmit}
-      className="flex flex-col gap-4 p-4 border rounded-md shadow-sm w-full md:w-96"
-    >
-      <h2 className="text-2xl font-semibold">Register</h2>
-      <Input
-        type="text"
-        placeholder="Username"
-        value={username}
-        onChange={(e) => setUsername(e.target.value)}
-      />
-      <Input
-        type="password"
-        placeholder="Password"
-        value={password}
-        onChange={(e) => setPassword(e.target.value)}
-      />
-      <Button type="submit">Register</Button>
-    </form>
+    <Form {...form}>
+      <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
+        <FormField
+          control={form.control}
+          name="username"
+          render={({ field }) => (
+            <FormItem>
+              <FormLabel>Username</FormLabel>
+              <FormControl>
+                <Input placeholder="Username" {...field} />
+              </FormControl>
+              <FormDescription>
+                Enter your desired username.
+              </FormDescription>
+              <FormMessage />
+            </FormItem>
+          )}
+        />
+        <FormField
+          control={form.control}
+          name="password"
+          render={({ field }) => (
+            <FormItem>
+              <FormLabel>Password</FormLabel>
+              <FormControl>
+                <Input type="password" placeholder="Password" {...field} />
+              </FormControl>
+              <FormDescription>
+                Enter your desired password.
+              </FormDescription>
+              <FormMessage />
+            </FormItem>
+          )}
+        />
+        <Button type="submit">Register</Button>
+      </form>
+    </Form>
   );
 };
 
