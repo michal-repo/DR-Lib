@@ -62,7 +62,9 @@ const nextConfig: NextConfig = {
   images: {
     // Use the dynamically generated remotePatterns array
     remotePatterns: remotePatternsConfig,
+    unoptimized: true,    
   },
+  output: 'export',
 };
 
 // Log the final config being used (optional, for debugging)

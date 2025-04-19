@@ -1,9 +1,9 @@
-// src/app/catalog/[catalogName]/page.tsx
+// src/app/catalog/catalog-page-client.tsx
 "use client";
 
 import Image from 'next/image';
 import Link from 'next/link';
-import { useParams, useSearchParams } from 'next/navigation';
+import { useSearchParams } from 'next/navigation';
 import { useEffect, useState, useMemo, useCallback } from 'react';
 import { usePagination, DOTS } from '@/hooks/usePagination';
 import ImageModal from '@/components/ImageModal';
@@ -15,11 +15,12 @@ interface ImageData { images: ImageCatalog[]; }
 const IMAGES_PER_PAGE = 18;
 const IMAGE_PAGINATION_SIBLING_COUNT = 2;
 
-const CatalogDetailPage = () => {
-  const params = useParams();
+const CatalogPageClient = () => {
   const searchParams = useSearchParams();
-  const encodedCatalogName = params.catalogName as string;
-  const catalogName = decodeURIComponent(encodedCatalogName || '');
+  const encodedCatalogNameFromQuery = searchParams.get('catalog');
+  const catalogName = useMemo(() => {
+      return encodedCatalogNameFromQuery ? decodeURIComponent(encodedCatalogNameFromQuery) : '';
+  }, [encodedCatalogNameFromQuery]);
 
   const [catalog, setCatalog] = useState<ImageCatalog | null | undefined>(undefined);
   const [loading, setLoading] = useState(true);
@@ -27,31 +28,18 @@ const CatalogDetailPage = () => {
   const [currentImagePage, setCurrentImagePage] = useState(1);
   const [selectedImageIndex, setSelectedImageIndex] = useState<number | null>(null);
 
-  // --- Read 'fromPage' and 'q' and construct backHref ---
   const fromPageParam = searchParams.get('fromPage');
-  const searchParamQ = searchParams.get('q'); // Get the search term
-
+  const searchParamQ = searchParams.get('q');
   const backHref = useMemo(() => {
     const queryParams = new URLSearchParams();
     const pageNum = Number(fromPageParam);
-
-    // Add 'page' if valid
-    if (fromPageParam && !isNaN(pageNum) && pageNum > 0) {
-      queryParams.set('page', fromPageParam);
-    }
-    // Add 'q' if it exists
-    if (searchParamQ) {
-      queryParams.set('q', searchParamQ); // URLSearchParams handles encoding
-    }
-
+    if (fromPageParam && !isNaN(pageNum) && pageNum > 0) queryParams.set('page', fromPageParam);
+    if (searchParamQ) queryParams.set('q', searchParamQ);
     const queryString = queryParams.toString();
-    return `/main${queryString ? `?${queryString}` : ''}`; // Construct final href
-
-  }, [fromPageParam, searchParamQ]); // Add searchParamQ dependency
-// --- Fetch Data Effect ---
-useEffect(() => {
-  // --- Get URL from environment variable ---
-  const imageUrl = process.env.NEXT_PUBLIC_IMAGE_DATA_URL;
+    return `/main${queryString ? `?${queryString}` : ''}`;
+  }, [fromPageParam, searchParamQ]);
+  useEffect(() => {
+    const imageUrl = process.env.NEXT_PUBLIC_IMAGE_DATA_URL;
 
   if (!imageUrl) {
       console.error("Configuration Error: NEXT_PUBLIC_IMAGE_DATA_URL is not defined.");
@@ -61,49 +49,52 @@ useEffect(() => {
   }
   // --- End Get URL ---
 
-  if (!catalogName) {
-      setError("Catalog name not found in URL.");
-      setLoading(false);
-      setCatalog(null);
-      return;
-  };
-
-  const fetchCatalogData = async () => {
-    setLoading(true);
-    setError(null);
-    setCatalog(undefined);
-    setCurrentImagePage(1);
-    setSelectedImageIndex(null);
-    try {
-      const response = await fetch(imageUrl);
-      if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
-      const data: ImageData = await response.json();
-      const foundCatalog = data.images.find(c => c.name === catalogName);
-
-      if (foundCatalog) {
-        foundCatalog.list = foundCatalog.list.filter(item => item.src && item.name);
-        setCatalog(foundCatalog);
-      } else {
+    if (!catalogName) {
+        setError("Catalog parameter missing in URL.");
+        setLoading(false);
         setCatalog(null);
-        setError(`Catalog "${catalogName}" not found.`);
+        return;
+    };
+    // --- End Check ---
+
+    const fetchCatalogData = async () => {
+      setLoading(true);
+      setError(null);
+      setCatalog(undefined);
+      setCurrentImagePage(1);
+      setSelectedImageIndex(null);
+      try {
+        // Fetch ALL data
+        const response = await fetch(imageUrl);
+        if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+        const data: ImageData = await response.json();
+
+        // Find the specific catalog based on the name from query param
+        const foundCatalog = data.images.find(c => c.name === catalogName);
+
+        if (foundCatalog) {
+          foundCatalog.list = foundCatalog.list.filter(item => item.src && item.name);
+          setCatalog(foundCatalog);
+        } else {
+          setCatalog(null);
+          setError(`Catalog "${catalogName}" not found.`);
+        }
+      } catch (e: any) {
+        setError(e.message);
+        setCatalog(null);
+      } finally {
+        setLoading(false);
       }
-    } catch (e: any) {
-      setError(e.message);
-      setCatalog(null);
-    } finally {
-      setLoading(false);
-    }
-  };
+    };
 
-  fetchCatalogData();
-}, [catalogName]);
+    fetchCatalogData();
+  // Depend on catalogName derived from the query parameter
+  }, [catalogName]);
 
-// --- Image List ---
-const fullImageList = useMemo(() => catalog?.list || [], [catalog]);
-
-// --- Image Pagination Logic ---
-const totalImages = fullImageList.length;
-const totalImagePages = Math.ceil(totalImages / IMAGES_PER_PAGE);
+  // --- Image List (no change) ---
+  const fullImageList = useMemo(() => catalog?.list || [], [catalog]);
+  const totalImages = fullImageList.length;
+  const totalImagePages = Math.ceil(totalImages / IMAGES_PER_PAGE);
 
 const imagePaginationRange = usePagination({
   currentPage: currentImagePage,
@@ -112,9 +103,9 @@ const imagePaginationRange = usePagination({
   pageSize: IMAGES_PER_PAGE,
 });
 
-const imageStartIndex = (currentImagePage - 1) * IMAGES_PER_PAGE;
-const imageEndIndex = imageStartIndex + IMAGES_PER_PAGE;
-const currentGridImages = fullImageList.slice(imageStartIndex, imageEndIndex);
+  const imageStartIndex = (currentImagePage - 1) * IMAGES_PER_PAGE;
+  const imageEndIndex = imageStartIndex + IMAGES_PER_PAGE;
+  const currentGridImages = fullImageList.slice(imageStartIndex, imageEndIndex);
 
 // --- Effect to Sync Grid Page with Modal Navigation ---
 useEffect(() => {
@@ -212,51 +203,58 @@ useEffect(() => {
 ]);
 
 
-// --- Calculate Props for Modal ---
-const currentImageUrlForModal = selectedImageIndex !== null ? fullImageList[selectedImageIndex]?.src : null;
-const hasPreviousImage = selectedImageIndex !== null && selectedImageIndex > 0;
-const hasNextImage = selectedImageIndex !== null && selectedImageIndex < fullImageList.length - 1;
+  // --- Calculate Props for Modal (no change) ---
+  const currentImageUrlForModal = selectedImageIndex !== null ? fullImageList[selectedImageIndex]?.src : null;
+  const hasPreviousImage = selectedImageIndex !== null && selectedImageIndex > 0;
+  const hasNextImage = selectedImageIndex !== null && selectedImageIndex < fullImageList.length - 1;
 
-// --- Render Logic ---
-if (loading) {
-  return <main className="flex min-h-screen flex-col items-center justify-center p-24">Loading Catalog...</main>;
-}
+  // --- Render Logic ---
+  if (loading) {
+    // Keep loading state as fetch is client-side
+    return <main className="flex min-h-screen flex-col items-center justify-center p-24">Loading Catalog...</main>;
+  }
 
-if (error || catalog === null) {
-  return (
-      <main className="flex min-h-screen flex-col items-center p-12 md:p-24">
-           <Link href="/main" className="text-blue-600 hover:underline mb-4">&larr; Back to Catalogs</Link>
-           <h1 className="text-2xl font-bold text-red-600 mb-4">Error</h1>
-           <p>{error || `Catalog "${catalogName}" could not be loaded or found.`}</p>
-      </main>
-  );
-}
+  if (error || catalog === null) {
+    // Error state remains important
+    return (
+        <main className="flex min-h-screen flex-col items-center p-12 md:p-24">
+             {/* Use backHref calculated from searchParams */}
+             <Link href={backHref} className="text-blue-600 hover:underline mb-4">&larr; Back to Catalogs</Link>
+             <h1 className="text-2xl font-bold text-red-600 mb-4">Error</h1>
+             {/* Display error or specific message */}
+             <p>{error || (catalogName ? `Catalog "${catalogName}" could not be loaded or found.` : 'Catalog parameter missing.')}</p>
+        </main>
+    );
+  }
 
-if (catalog === undefined) {
-    // Should ideally be covered by loading state, but as a fallback
-     return <main className="flex min-h-screen flex-col items-center justify-center p-24">Initializing...</main>;
-}
+  // This state might be briefly hit if catalogName exists but fetch hasn't completed
+  if (catalog === undefined) {
+       return <main className="flex min-h-screen flex-col items-center justify-center p-24">Initializing...</main>;
+  }
 
- if (totalImages === 0) {
-  return (
-      <main className="flex min-h-screen flex-col items-center p-12 md:p-24">
-           <Link href="/main" className="text-blue-600 hover:underline mb-4">&larr; Back to Catalogs</Link>
-           <h1 className="text-3xl font-bold mb-8">{catalog.name}</h1>
-           <p>This catalog contains no images.</p>
-      </main>
-  );
-}
+   if (totalImages === 0) {
+    // State for catalog found but empty
+    return (
+        <main className="flex min-h-screen flex-col items-center p-12 md:p-24">
+             <Link href={backHref} className="text-blue-600 hover:underline mb-4">&larr; Back to Catalogs</Link>
+             <h1 className="text-3xl font-bold mb-8">{catalog.name}</h1>
+             <p>This catalog contains no images.</p>
+        </main>
+    );
+  }
+
+  // --- Main Render Output (JSX remains the same, using state/props derived above) ---
   return (
     <>
       <main className="flex min-h-screen flex-col items-center p-12 md:p-24">
-        {/* Back link uses updated backHref */}
+        {/* Back link */}
          <div className="w-full max-w-7xl mb-6">
             <Link href={backHref} className="text-blue-600 hover:underline mb-4 inline-block">
                 &larr; Back to Catalogs
             </Link>
         </div>
+        {/* Title */}
         <h1 className="text-4xl font-bold mb-8">{catalog.name}</h1>
-
         {/* Image Grid */}
          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4 w-full max-w-7xl mb-8">
           {currentGridImages.map((image, indexOnPage) => {
@@ -384,4 +382,4 @@ if (catalog === undefined) {
   );
 };
 
-export default CatalogDetailPage;
+export default CatalogPageClient; // Export the renamed component

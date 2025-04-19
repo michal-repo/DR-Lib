@@ -1,5 +1,5 @@
 // src/app/main/main-page-client.tsx
-"use client"; // <--- Add this directive
+"use client";
 
 import Image from 'next/image';
 import Link from 'next/link';
@@ -262,10 +262,11 @@ const MainPageClient = () => { // Renamed component
           {/* Catalog Grid */}
           <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6 w-full max-w-7xl mb-8">
             {currentCatalogs.map((catalog, index) => (
-              // --- Update Link href to include search term ---
+              // --- Update Link href ---
               <Link
                 key={catalog.name}
-                href={`/catalog/${encodeURIComponent(catalog.name)}?fromPage=${currentPage}${searchTerm ? `&q=${encodeURIComponent(searchTerm)}` : ''}`}
+                // Change from dynamic segment to query parameter 'catalog'
+                href={`/catalog?catalog=${encodeURIComponent(catalog.name)}&fromPage=${currentPage}${searchTerm ? `&q=${encodeURIComponent(searchTerm)}` : ''}`}
                 className="block border rounded-lg overflow-hidden shadow-md hover:shadow-xl transition-shadow duration-200 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-opacity-50"
               >
                 {/* Card Content */}
@@ -316,9 +317,11 @@ const MainPageClient = () => { // Renamed component
                   </div>
                 </div>
               </Link>
+              // --- End Update ---
             ))}
           </div>
-          {/* Pagination Controls */}
+
+          {/* --- Pagination Controls --- */}
           {totalPages > 1 && (
             <nav aria-label="Catalog Page navigation">
               <ul className="flex items-center justify-center space-x-1 mt-8">
@@ -409,4 +412,4 @@ const MainPageClient = () => { // Renamed component
   );
 };
 
-export default MainPageClient; // Export the new component
+export default MainPageClient;
