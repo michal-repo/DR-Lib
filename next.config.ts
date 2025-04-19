@@ -65,6 +65,8 @@ const nextConfig: NextConfig = {
     unoptimized: true,    
   },
   output: 'export',
+  basePath: '/DR-Lib',
+  reactStrictMode: true,
 };
 
 // Log the final config being used (optional, for debugging)
