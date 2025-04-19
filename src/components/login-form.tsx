@@ -2,6 +2,7 @@
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { useRouter } from 'next/navigation';
 import { useState } from "react";
 import { useToast } from "@/hooks/use-toast";
 import {
@@ -28,6 +29,7 @@ const formSchema = z.object({
 
 const LoginForm = () => {
   const { toast } = useToast();
+  const router = useRouter();
 
   const form = useForm<z.infer<typeof formSchema>>({
     resolver: zodResolver(formSchema),
@@ -44,6 +46,7 @@ const LoginForm = () => {
       description: `User ${values.username} logged in successfully!`,
     });
     form.reset();
+    router.push('/main'); // Redirect to main page
   };
 
   return (
@@ -88,3 +91,4 @@ const LoginForm = () => {
 };
 
 export default LoginForm;
+
