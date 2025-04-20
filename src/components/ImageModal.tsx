@@ -2,16 +2,21 @@
 "use client";
 
 import Image from 'next/image';
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
+import { Heart } from 'lucide-react';
+import { Button } from '@/components/ui/button';
+import { useToast } from '@/hooks/use-toast';
+import apiClient from '@/lib/apiClient';
 
 interface ImageModalProps {
-  // imageUrl: string | null; // Replaced by currentImageUrl
-  currentImageUrl: string | null; // The URL of the image currently shown
+  currentImageUrl: string | null;
   onClose: () => void;
-  onPrevious: () => void; // Function to call when Previous is clicked
-  onNext: () => void;     // Function to call when Next is clicked
-  hasPrevious: boolean;  // True if there's a previous image
-  hasNext: boolean;      // True if there's a next image
+  onPrevious: () => void;
+  onNext: () => void;
+  hasPrevious: boolean;
+  hasNext: boolean;
+  isLoggedIn: boolean | null;
+  onFavoriteStatusChange?: (imageUrl: string, isNowFavorite: boolean) => void; // <-- ADD THIS PROP
 }
 
 const ImageModal: React.FC<ImageModalProps> = ({
@@ -20,46 +25,106 @@ const ImageModal: React.FC<ImageModalProps> = ({
   onPrevious,
   onNext,
   hasPrevious,
-  hasNext
+  hasNext,
+  isLoggedIn,
+  onFavoriteStatusChange, // <-- Destructure the prop
 }) => {
-  // Hook 1: useEffect for Escape key press and Arrow keys
+  const { toast } = useToast();
+  const [isFavorite, setIsFavorite] = useState<boolean | null>(null);
+  const [isTogglingFavorite, setIsTogglingFavorite] = useState(false);
+
+  // --- Effect to Check Initial Favorite Status ---
+  useEffect(() => {
+    // Reset status when image changes or user logs out/in
+    setIsFavorite(null);
+
+    // Only check if logged in and an image URL is present
+    if (isLoggedIn === true && currentImageUrl) {
+      const checkFavoriteStatus = async () => {
+        setIsFavorite(null); // Indicate checking state
+        try {
+          const result = await apiClient<{ data: { isFavorite: boolean } }>(
+            `/favorites/check?file=${encodeURIComponent(currentImageUrl)}`,
+            { method: 'GET' },
+            true // Authenticate this request
+          );
+          setIsFavorite(result.data.isFavorite);
+        } catch (error: any) {
+          // Don't show error toast for check failure, just assume not favorite
+          console.error("Failed to check favorite status:", error);
+          setIsFavorite(false); // Assume not favorite on error
+          // Handle 401 specifically? Maybe log out user? For now, just set false.
+        }
+      };
+      checkFavoriteStatus();
+    } else {
+        // If not logged in or no image, definitely not a favorite in this context
+        setIsFavorite(false);
+    }
+  }, [currentImageUrl, isLoggedIn]); // Re-run when image or login status changes
+
+  // --- Handler to Toggle Favorite Status ---
+  const handleToggleFavorite = async (e: React.MouseEvent) => {
+    e.stopPropagation();
+
+    if (!isLoggedIn || !currentImageUrl || isFavorite === null || isTogglingFavorite) {
+      return;
+    }
+
+    setIsTogglingFavorite(true);
+    const currentlyIsFavorite = isFavorite;
+    const method = currentlyIsFavorite ? 'DELETE' : 'POST';
+
+    try {
+      await apiClient(
+        '/favorites',
+        { method: method, body: JSON.stringify({ file: currentImageUrl }) },
+        true
+      );
+
+      // Success: Update state, show toast, and call callback
+      const isNowFavorite = !currentlyIsFavorite; // Calculate the new state
+      setIsFavorite(isNowFavorite);
+      toast({ title: currentlyIsFavorite ? "Removed from Favorites" : "Added to Favorites" });
+      onFavoriteStatusChange?.(currentImageUrl, isNowFavorite); // <-- CALL CALLBACK
+
+    } catch (error: any) {
+      // Error handling remains the same
+      console.error("Failed to toggle favorite:", error);
+      let errorMessage = currentlyIsFavorite ? "Could not remove favorite." : "Could not add favorite.";
+      toast({ variant: "destructive", title: "Error", description: errorMessage });
+      // Correct local state based on specific errors (404, 409)
+      if (error?.status === 404 && currentlyIsFavorite) setIsFavorite(false);
+      else if (error?.status === 409 && !currentlyIsFavorite) setIsFavorite(true);
+
+    } finally {
+      setIsTogglingFavorite(false);
+    }
+  };
+
+
+  // --- Existing Effects (Escape, Arrows, Background Scroll) ---
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') {
-        onClose();
-      } else if (event.key === 'ArrowLeft' && hasPrevious) {
-        onPrevious();
-      } else if (event.key === 'ArrowRight' && hasNext) {
-        onNext();
-      }
+      if (event.key === 'Escape') onClose();
+      else if (event.key === 'ArrowLeft' && hasPrevious) onPrevious();
+      else if (event.key === 'ArrowRight' && hasNext) onNext();
     };
-    if (currentImageUrl) { // Only add listener when modal is open
-      document.addEventListener('keydown', handleKeyDown);
-    } else {
-      document.removeEventListener('keydown', handleKeyDown);
-    }
-    return () => {
-      document.removeEventListener('keydown', handleKeyDown);
-    };
-    // Add navigation functions and flags to dependencies
+    if (currentImageUrl) document.addEventListener('keydown', handleKeyDown);
+    return () => document.removeEventListener('keydown', handleKeyDown);
   }, [currentImageUrl, onClose, onPrevious, onNext, hasPrevious, hasNext]);
 
-  // Hook 2: useEffect for preventing background scroll
   useEffect(() => {
       if (currentImageUrl) {
           const originalStyle = window.getComputedStyle(document.body).overflow;
           document.body.style.overflow = 'hidden';
-          return () => {
-              document.body.style.overflow = originalStyle;
-          };
+          return () => { document.body.style.overflow = originalStyle; };
       }
   }, [currentImageUrl]);
 
-  if (!currentImageUrl) {
-    return null;
-  }
+  if (!currentImageUrl) return null;
 
-  // --- Modal JSX ---
+  // --- Modal JSX (remains the same, including the favorite button) ---
   return (
     <div
       className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-75 p-4"
@@ -73,16 +138,41 @@ const ImageModal: React.FC<ImageModalProps> = ({
         className="relative flex items-center justify-center bg-white p-2 rounded-lg shadow-xl w-[95vw] h-[95vh] max-w-6xl max-h-[95vh] overflow-hidden"
         onClick={(e) => e.stopPropagation()}
       >
-        {/* Close Button */}
-        <button
-          onClick={onClose}
-          className="absolute top-2 right-2 z-30 p-1 bg-black bg-opacity-50 text-white rounded-full hover:bg-opacity-75 focus:outline-none focus:ring-2 focus:ring-white"
-          aria-label="Close image view"
-        >
-          <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-          </svg>
-        </button>
+        {/* --- Buttons Container (Top Right) --- */}
+        <div className="absolute top-2 right-2 z-30 flex items-center space-x-2">
+          {/* Favorite Button (Conditional) */}
+          {isLoggedIn === true && (
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={handleToggleFavorite}
+              disabled={isTogglingFavorite || isFavorite === null}
+              className={`p-1 rounded-full text-white ${ // Keep text white
+                isFavorite === null ? 'bg-gray-500' : // Loading/Checking state: Gray background
+                isFavorite ? 'bg-red-500 hover:bg-red-600' : // Is favorite state: Red background
+                'bg-gray-700 hover:bg-gray-600' // Not favorite state: Opaque dark gray background
+              } focus:outline-none focus:ring-2 focus:ring-white disabled:opacity-50`}
+              aria-label={isFavorite ? "Remove from favorites" : "Add to favorites"}
+            >
+              <Heart
+                className={`h-5 w-5 ${isFavorite ? 'fill-current' : ''}`} // Fill heart if favorite
+              />
+            </Button>
+          )}
+
+          {/* Close Button */}
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={onClose}
+            className="p-1 bg-black bg-opacity-50 text-white rounded-full hover:bg-opacity-75 focus:outline-none focus:ring-2 focus:ring-white"
+            aria-label="Close image view"
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          </Button>
+        </div>
 
         {/* Previous Button */}
         {hasPrevious && (
@@ -96,8 +186,7 @@ const ImageModal: React.FC<ImageModalProps> = ({
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
             </svg>
           </button>
-        )}
-
+)}
         {/* Next Button */}
         {hasNext && (
           <button
@@ -114,9 +203,9 @@ const ImageModal: React.FC<ImageModalProps> = ({
 
 
         {/* Image Container */}
-        <div className="relative w-full h-full flex items-center justify-center"> {/* Added flex centering for the image itself */}
+        <div className="relative w-full h-full flex items-center justify-center">
            <Image
-            key={currentImageUrl} // Add key to force re-render on src change if needed
+            key={currentImageUrl}
             src={currentImageUrl}
             alt="Enlarged view"
             fill
@@ -131,3 +220,4 @@ const ImageModal: React.FC<ImageModalProps> = ({
 };
 
 export default ImageModal;
+

@@ -7,7 +7,9 @@ import { useSearchParams } from 'next/navigation';
 import { useEffect, useState, useMemo, useCallback } from 'react';
 import { usePagination, DOTS } from '@/hooks/usePagination';
 import ImageModal from '@/components/ImageModal';
-
+import { getToken, removeToken } from "@/lib/auth"; // <-- Import auth utils
+import apiClient from '@/lib/apiClient'; // <-- Import apiClient
+//
 interface ImageItem { name: string; src: string; }
 interface ImageCatalog { name: string; list: ImageItem[]; }
 interface ImageData { images: ImageCatalog[]; }
@@ -28,6 +30,10 @@ const CatalogPageClient = () => {
   const [currentImagePage, setCurrentImagePage] = useState(1);
   const [selectedImageIndex, setSelectedImageIndex] = useState<number | null>(null);
 
+  // --- NEW: Add isLoggedIn state ---
+  const [isLoggedIn, setIsLoggedIn] = useState<boolean | null>(null);
+
+  // ... (backHref calculation) ...
   const fromPageParam = searchParams.get('fromPage');
   const searchParamQ = searchParams.get('q');
   const backHref = useMemo(() => {
@@ -39,8 +45,30 @@ const CatalogPageClient = () => {
     return `/main${queryString ? `?${queryString}` : ''}`;
   }, [fromPageParam, searchParamQ]);
   useEffect(() => {
-    const imageUrl = process.env.NEXT_PUBLIC_IMAGE_DATA_URL;
+    const checkAuthStatus = async () => {
+        const token = getToken();
+        if (!token) {
+            setIsLoggedIn(false);
+            return;
+        }
+        try {
+            await apiClient('/check', { method: 'GET' }, true);
+            setIsLoggedIn(true);
+        } catch (error: any) {
+            setIsLoggedIn(false);
+            if (error?.status === 401) removeToken();
+        }
+    };
+    checkAuthStatus();
+  }, []); // Check only on mount
 
+  // --- Effect to Fetch Catalog Data (remains largely the same) ---
+  useEffect(() => {
+    // ... (fetch image data logic using NEXT_PUBLIC_IMAGE_DATA_URL) ...
+    const encodedCatalogNameFromQuery = searchParams.get('catalog');
+    const catalogName = encodedCatalogNameFromQuery ? decodeURIComponent(encodedCatalogNameFromQuery) : '';
+    const imageUrl = process.env.NEXT_PUBLIC_IMAGE_DATA_URL;
+    
   if (!imageUrl) {
       console.error("Configuration Error: NEXT_PUBLIC_IMAGE_DATA_URL is not defined.");
       setError("Application is not configured correctly (missing image data URL).");
@@ -86,12 +114,10 @@ const CatalogPageClient = () => {
         setLoading(false);
       }
     };
-
     fetchCatalogData();
-  // Depend on catalogName derived from the query parameter
-  }, [catalogName]);
+  }, [searchParams]); // Depend on searchParams to get catalog name
 
-  // --- Image List (no change) ---
+  // ... (fullImageList, totalImages, totalImagePages, imagePaginationRange, indices, currentGridImages) ...
   const fullImageList = useMemo(() => catalog?.list || [], [catalog]);
   const totalImages = fullImageList.length;
   const totalImagePages = Math.ceil(totalImages / IMAGES_PER_PAGE);
@@ -117,7 +143,7 @@ useEffect(() => {
       setCurrentImagePage(validPage);
     }
   }
-}, [selectedImageIndex, currentImagePage, IMAGES_PER_PAGE, totalImagePages, totalImages]);
+}, [selectedImageIndex, currentImagePage, totalImagePages, totalImages]);
 
 
 // --- Event Handlers ---
@@ -148,16 +174,16 @@ const handleImagePageChange = useCallback((pageNumber: number | string) => {
   }
 }, [imagePaginationRange, totalImagePages]); // Add dependencies
 
-// --- Modal Event Handlers ---
-const handleImageClick = (imageIndexInFullList: number) => {
-  setSelectedImageIndex(imageIndexInFullList);
-};
-const handleCloseModal = () => {
-  setSelectedImageIndex(null);
-};
-const handleModalPrevious = () => {
-  setSelectedImageIndex(prevIndex => (prevIndex === null || prevIndex === 0 ? prevIndex : prevIndex - 1));
-};
+
+
+//
+  // --- Modal Event Handlers ---
+  
+  const handleImageClick = (imageIndexInFullList: number) => setSelectedImageIndex(imageIndexInFullList);
+  const handleCloseModal = () => setSelectedImageIndex(null);
+  const handleModalPrevious = () => {
+    setSelectedImageIndex(prevIndex => (prevIndex === null || prevIndex === 0 ? prevIndex : prevIndex - 1));
+  };
 const handleModalNext = () => {
    setSelectedImageIndex(prevIndex => (prevIndex === null || prevIndex >= fullImageList.length - 1 ? prevIndex : prevIndex + 1));
 };
@@ -194,16 +220,10 @@ useEffect(() => {
   };
 
   // Dependencies: Re-create handler if these change
-}, [
-    selectedImageIndex, // To check modal visibility
-    currentImagePage,   // To check if already on first/last page
-    totalImagePages,    // To check if already on last page
-    handlePreviousImagePage, // Stable handler from useCallback
-    handleNextImagePage      // Stable handler from useCallback
-]);
+}, [selectedImageIndex, currentImagePage, totalImagePages, handlePreviousImagePage, handleNextImagePage]);
 
 
-  // --- Calculate Props for Modal (no change) ---
+  // ... (Calculate Props for Modal) ...
   const currentImageUrlForModal = selectedImageIndex !== null ? fullImageList[selectedImageIndex]?.src : null;
   const hasPreviousImage = selectedImageIndex !== null && selectedImageIndex > 0;
   const hasNextImage = selectedImageIndex !== null && selectedImageIndex < fullImageList.length - 1;
@@ -248,7 +268,7 @@ useEffect(() => {
     <>
       <main className="flex min-h-screen flex-col items-center p-12 md:p-24">
         {/* Back link */}
-         <div className="w-full max-w-7xl mb-6">
+        <div className="w-full max-w-7xl mb-6">
             <Link href={backHref} className="text-blue-600 hover:underline mb-4 inline-block">
                 &larr; Back to Catalogs
             </Link>
@@ -276,7 +296,7 @@ useEffect(() => {
                 />
                  <div className="absolute bottom-0 left-0 right-0 bg-black bg-opacity-50 text-white text-xs p-1 truncate opacity-0 group-hover:opacity-100 transition-opacity duration-150">
                       {image.name}
-                  </div>
+         </div>
               </button>
             );
           })}
@@ -377,9 +397,10 @@ useEffect(() => {
         onNext={handleModalNext}
         hasPrevious={hasPreviousImage}
         hasNext={hasNextImage}
+        isLoggedIn={isLoggedIn} // <-- Pass login status down
       />
     </>
   );
 };
 
-export default CatalogPageClient; // Export the renamed component
+export default CatalogPageClient;
