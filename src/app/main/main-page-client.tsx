@@ -338,8 +338,8 @@ const handleLogout = async () => {
          </div>
       ) : (
         <>
-          {/* Catalog Grid (remains the same) */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6 w-full max-w-7xl mb-8">
+          {/* Catalog Grid */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3 w-full max-w-7xl mb-8">
             {currentCatalogs.map((catalog, index) => (
               <Link
                 key={catalog.name}
@@ -351,8 +351,13 @@ const handleLogout = async () => {
               >
                 {/* Card Content */}
                 <div>
-                  {/* ... h2, image divs ... */}
-                   <h2 className="text-lg font-semibold p-3 truncate text-center bg-gray-50 border-b">{catalog.name}</h2>
+                  {/* --- MODIFIED: Catalog Name Header --- */}
+                  {/* Reduced font size (text-base), kept min-height and flex centering for visibility */}
+                  <div className="text-sm font-semibold p-3 text-center bg-gray-50 border-b min-h-[4rem] flex items-center justify-center">
+                    <h2>{catalog.name}</h2>
+                  </div>
+                  {/* --- END MODIFICATION --- */}
+
                    <div className="flex justify-center items-center space-x-1 h-32 p-2">
                        {/* Images */}
                        <div className="relative w-1/3 h-full">
