@@ -14,7 +14,8 @@ import { usePagination, DOTS } from '@/hooks/usePagination';
 // Define the structure of a favorite item from the API
 interface FavoriteItem {
   id: number;
-  file: string; // This is the image src
+  file: string;
+  thumbnail: string;
   created_at: string;
 }
 
@@ -52,7 +53,12 @@ const FavoritesPageClient = () => {
         setIsLoggedIn(true);
         try {
           const result = await apiClient<{ data: FavoriteItem[] }>('/favorites', { method: 'GET' }, true);
-          setFavoritesList(result.data || []);
+          // Ensure thumbnail exists or default to null/empty string if API doesn't provide it yet
+          const processedFavorites = (result.data || []).map(fav => ({
+              ...fav,
+              thumbnail: fav.thumbnail || fav.file // Fallback to main file if thumbnail missing
+          }));
+          setFavoritesList(processedFavorites);
           setCurrentPage(1); // Reset to page 1 when favorites are fetched/refetched
         } catch (favError: any) {
           console.error("Failed to fetch favorites:", favError);
@@ -143,56 +149,51 @@ const FavoritesPageClient = () => {
     setSelectedImageIndex(prevIndex => (prevIndex === null || prevIndex >= favoritesList.length - 1 ? prevIndex : prevIndex + 1));
   };
 
-  // --- Callback for Modal Favorite Status Change (remains the same) ---
+  // --- Callback for Modal Favorite Status Change ---
   const handleFavoriteStatusChange = useCallback((imageUrl: string, isNowFavorite: boolean) => {
     if (!isNowFavorite) {
+      // Find the item being removed to potentially get its thumbnail
+      const removedItem = favoritesList.find(item => item.file === imageUrl);
+
+      // Update the list
       setFavoritesList(prevList => prevList.filter(item => item.file !== imageUrl));
+
+      // Close modal if the currently viewed item was removed
       if (selectedImageIndex !== null && favoritesList[selectedImageIndex]?.file === imageUrl) {
           handleCloseModal();
       }
       toast({ title: "Removed", description: "Favorite removed from this view." });
+    } else {
+        // If adding back (shouldn't happen from this page, but for completeness)
+        // We might need to re-fetch or have the thumbnail info passed back.
+        // For now, just log it.
+        console.warn("Favorite added unexpectedly on favorites page for:", imageUrl);
     }
-  }, [selectedImageIndex, favoritesList]);
+  }, [selectedImageIndex, favoritesList, toast]); // Added toast dependency
 
   // --- Calculate Props for Modal ---
   const currentImageUrlForModal = selectedImageIndex !== null ? favoritesList[selectedImageIndex]?.file : null;
+  // --- MODIFIED: Get thumbnail URL for the modal ---
+  const currentImageThumbnailUrlForModal = selectedImageIndex !== null ? favoritesList[selectedImageIndex]?.thumbnail : null;
   const hasPreviousImage = selectedImageIndex !== null && selectedImageIndex > 0;
   const hasNextImage = selectedImageIndex !== null && selectedImageIndex < favoritesList.length - 1;
 
-  // --- *** NEW: Effect for Favorites Page Arrow Key Navigation *** ---
+  // --- Effect for Favorites Page Arrow Key Navigation (remains the same) ---
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
-      // Ignore if modal is open or if focus is on an input element
       const target = event.target as HTMLElement;
       if (selectedImageIndex !== null || (target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable))) {
         return;
       }
-
-      // Handle Arrow Keys for Pagination
       if (event.key === 'ArrowLeft') {
-        if (currentPage > 1) {
-          handlePreviousPage();
-        }
+        if (currentPage > 1) handlePreviousPage();
       } else if (event.key === 'ArrowRight') {
-        if (currentPage < totalPages) {
-          handleNextPage();
-        }
+        if (currentPage < totalPages) handleNextPage();
       }
     };
-
-    // Add listener only if there are multiple pages
-    if (totalPages > 1) {
-      document.addEventListener('keydown', handleKeyDown);
-    }
-
-    // Remove listener on cleanup
-    return () => {
-      document.removeEventListener('keydown', handleKeyDown);
-    };
-
-    // Dependencies: Re-create handler if these change
+    if (totalPages > 1) document.addEventListener('keydown', handleKeyDown);
+    return () => { document.removeEventListener('keydown', handleKeyDown); };
   }, [selectedImageIndex, currentPage, totalPages, handlePreviousPage, handleNextPage]);
-  // --- *** END: Arrow Key Navigation Effect *** ---
 
 
   // --- Render Logic ---
@@ -200,7 +201,6 @@ const FavoritesPageClient = () => {
     return <main className="flex min-h-screen flex-col items-center justify-center p-24">Loading...</main>;
   }
 
-  // Note: Redirection should happen in useEffect, but this is a fallback
   if (isLoggedIn === false) {
      return <main className="flex min-h-screen flex-col items-center justify-center p-24">Redirecting to login...</main>;
   }
@@ -234,19 +234,18 @@ const FavoritesPageClient = () => {
             <>
                 {/* Grid */}
                 <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4 w-full max-w-7xl mb-8">
-                {/* Use currentGridFavorites for mapping */}
                 {currentGridFavorites.map((item, index) => {
                     const imageName = item.file.split('/').pop() || `Favorite ${item.id}`;
                     return (
                     <button
                         key={item.id}
-                        // Pass the index *on the current page* to handleImageClick
                         onClick={() => handleImageClick(index)}
                         className="relative aspect-square border rounded-md overflow-hidden shadow-sm hover:shadow-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-opacity-60 transition-shadow duration-150 group"
                         aria-label={`View favorite ${imageName}`}
                     >
                         <Image
-                        src={item.file}
+                        // Use the thumbnail from the item for the grid view
+                        src={item.thumbnail || item.file} // Fallback to main image if thumbnail missing
                         alt={imageName}
                         fill
                         sizes="(max-width: 640px) 45vw, (max-width: 768px) 30vw, (max-width: 1024px) 20vw, 15vw"
@@ -258,86 +257,84 @@ const FavoritesPageClient = () => {
                 })}
                 </div>
 
-                {/* Pagination Controls */}
+                {/* Pagination Controls (remains the same) */}
                 {totalPages > 1 && (
                     <nav aria-label="Favorites page navigation">
                         <ul className="flex items-center justify-center space-x-1 mt-8">
-                    {/* Previous Button */}
-                    <li>
-                        <button
-                        onClick={handlePreviousPage}
-                        disabled={currentPage === 1}
-                        className={`px-3 py-2 leading-tight rounded-md transition-colors duration-150 ${
-                            currentPage === 1
-                            ? 'bg-gray-100 text-gray-400 cursor-not-allowed'
-                            : 'bg-white text-blue-600 hover:bg-blue-100 hover:text-blue-700 border border-gray-300'
-                        }`}
-                        aria-label="Previous Favorites Page"
-                        >
-                        Prev
-                        </button>
-                    </li>
+                            {/* Previous Button */}
+                            <li>
+                                <button
+                                onClick={handlePreviousPage}
+                                disabled={currentPage === 1}
+                                className={`px-3 py-2 leading-tight rounded-md transition-colors duration-150 ${
+                                    currentPage === 1
+                                    ? 'bg-gray-100 text-gray-400 cursor-not-allowed'
+                                    : 'bg-white text-blue-600 hover:bg-blue-100 hover:text-blue-700 border border-gray-300'
+                                }`}
+                                aria-label="Previous Favorites Page"
+                                >
+                                Prev
+                                </button>
+                            </li>
 
-                    {/* Page Number Buttons */}
+                            {/* Page Number Buttons */}
                             {paginationRange.map((pageNumber, index) => {
                                 if (pageNumber === DOTS) {
-                            // Determine target page for DOTS click
-                            let prevNumeric = 1, nextNumeric = totalPages;
-                            for(let i = index - 1; i >= 0; i--) { if(typeof paginationRange[i] === 'number') { prevNumeric = paginationRange[i] as number; break; } }
-                            for(let i = index + 1; i < paginationRange.length; i++) { if(typeof paginationRange[i] === 'number') { nextNumeric = paginationRange[i] as number; break; } }
-                            const targetPage = nextNumeric < totalPages ? prevNumeric + 1 : prevNumeric + 1;
+                                    let prevNumeric = 1, nextNumeric = totalPages;
+                                    for(let i = index - 1; i >= 0; i--) { if(typeof paginationRange[i] === 'number') { prevNumeric = paginationRange[i] as number; break; } }
+                                    for(let i = index + 1; i < paginationRange.length; i++) { if(typeof paginationRange[i] === 'number') { nextNumeric = paginationRange[i] as number; break; } }
+                                    const targetPage = nextNumeric < totalPages ? prevNumeric + 1 : prevNumeric + 1;
 
-                            if (targetPage > 0 && targetPage <= totalPages) {
-                                return (
-                                    <li key={`${DOTS}-fav-${index}`}>
-                                        <button
-                                            onClick={() => handlePageChange(targetPage)}
-                                            className="px-3 py-2 leading-tight text-gray-500 bg-white border border-gray-300 hover:bg-gray-100 hover:text-gray-700 rounded-md"
-                                            aria-label={`Jump to favorites page ${targetPage}`}
-                                        >
-                                            {DOTS}
-                                        </button>
-                                    </li>
-                                );
-                            } else {
-                                return <li key={`${DOTS}-fav-${index}`} className="px-3 py-2 leading-tight text-gray-400">{DOTS}</li>;
+                                    if (targetPage > 0 && targetPage <= totalPages) {
+                                        return (
+                                            <li key={`${DOTS}-fav-${index}`}>
+                                                <button
+                                                    onClick={() => handlePageChange(targetPage)}
+                                                    className="px-3 py-2 leading-tight text-gray-500 bg-white border border-gray-300 hover:bg-gray-100 hover:text-gray-700 rounded-md"
+                                                    aria-label={`Jump to favorites page ${targetPage}`}
+                                                >
+                                                    {DOTS}
+                                                </button>
+                                            </li>
+                                        );
+                                    } else {
+                                        return <li key={`${DOTS}-fav-${index}`} className="px-3 py-2 leading-tight text-gray-400">{DOTS}</li>;
+                                    }
                                 }
-                        }
 
-                        // Render page number button
-                        return (
-                        <li key={`fav-page-${pageNumber}`}>
-                            <button
-                            onClick={() => handlePageChange(pageNumber)}
-                            disabled={currentPage === pageNumber}
-                            className={`px-3 py-2 leading-tight rounded-md transition-colors duration-150 ${
-                                currentPage === pageNumber
-                                ? 'bg-blue-500 text-white border border-blue-500 cursor-default'
-                                : 'bg-white text-blue-600 hover:bg-blue-100 hover:text-blue-700 border border-gray-300'
-                            }`}
-                            aria-current={currentPage === pageNumber ? 'page' : undefined}
-                            aria-label={`Favorites Page ${pageNumber}`}
-                            >
-                            {pageNumber}
-                            </button>
-                        </li>
-                        );
+                                return (
+                                <li key={`fav-page-${pageNumber}`}>
+                                    <button
+                                    onClick={() => handlePageChange(pageNumber)}
+                                    disabled={currentPage === pageNumber}
+                                    className={`px-3 py-2 leading-tight rounded-md transition-colors duration-150 ${
+                                        currentPage === pageNumber
+                                        ? 'bg-blue-500 text-white border border-blue-500 cursor-default'
+                                        : 'bg-white text-blue-600 hover:bg-blue-100 hover:text-blue-700 border border-gray-300'
+                                    }`}
+                                    aria-current={currentPage === pageNumber ? 'page' : undefined}
+                                    aria-label={`Favorites Page ${pageNumber}`}
+                                    >
+                                    {pageNumber}
+                                    </button>
+                                </li>
+                                );
                             })}
                             {/* Next Button */}
-                    <li>
-                        <button
-                        onClick={handleNextPage}
-                        disabled={currentPage === totalPages}
-                        className={`px-3 py-2 leading-tight rounded-md transition-colors duration-150 ${
-                            currentPage === totalPages
-                            ? 'bg-gray-100 text-gray-400 cursor-not-allowed'
-                            : 'bg-white text-blue-600 hover:bg-blue-100 hover:text-blue-700 border border-gray-300'
-                        }`}
-                        aria-label="Next Favorites Page"
-                        >
-                        Next
-                        </button>
-                    </li>
+                            <li>
+                                <button
+                                onClick={handleNextPage}
+                                disabled={currentPage === totalPages}
+                                className={`px-3 py-2 leading-tight rounded-md transition-colors duration-150 ${
+                                    currentPage === totalPages
+                                    ? 'bg-gray-100 text-gray-400 cursor-not-allowed'
+                                    : 'bg-white text-blue-600 hover:bg-blue-100 hover:text-blue-700 border border-gray-300'
+                                }`}
+                                aria-label="Next Favorites Page"
+                                >
+                                Next
+                                </button>
+                            </li>
                         </ul>
                     </nav>
                 )}
@@ -348,6 +345,8 @@ const FavoritesPageClient = () => {
       {/* --- Render Modal --- */}
        <ImageModal
         currentImageUrl={currentImageUrlForModal}
+        // --- MODIFIED: Pass the thumbnail URL to the modal ---
+        currentImageThumbnailUrl={currentImageThumbnailUrlForModal}
         onClose={handleCloseModal}
         onPrevious={handleModalPrevious}
         onNext={handleModalNext}

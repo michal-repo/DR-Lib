@@ -10,6 +10,7 @@ import apiClient from '@/lib/apiClient';
 
 interface ImageModalProps {
   currentImageUrl: string | null;
+  currentImageThumbnailUrl: string | null;
   onClose: () => void;
   onPrevious: () => void;
   onNext: () => void;
@@ -21,6 +22,7 @@ interface ImageModalProps {
 
 const ImageModal: React.FC<ImageModalProps> = ({
   currentImageUrl,
+  currentImageThumbnailUrl,
   onClose,
   onPrevious,
   onNext,
@@ -67,18 +69,19 @@ const ImageModal: React.FC<ImageModalProps> = ({
   const handleToggleFavorite = async (e: React.MouseEvent) => {
     e.stopPropagation();
 
-    if (!isLoggedIn || !currentImageUrl || isFavorite === null || isTogglingFavorite) {
+    if (!isLoggedIn || !currentImageUrl || !currentImageThumbnailUrl || isFavorite === null || isTogglingFavorite) {
       return;
     }
 
     setIsTogglingFavorite(true);
     const currentlyIsFavorite = isFavorite;
     const method = currentlyIsFavorite ? 'DELETE' : 'POST';
+    const fav_payload = currentlyIsFavorite ?  { file: currentImageUrl } : { file: currentImageUrl, thumbnail: currentImageThumbnailUrl };
 
     try {
       await apiClient(
         '/favorites',
-        { method: method, body: JSON.stringify({ file: currentImageUrl }) },
+        { method: method, body: JSON.stringify(fav_payload) },
         true
       );
 

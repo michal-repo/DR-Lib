@@ -14,7 +14,7 @@ import { getToken, removeToken } from "@/lib/auth";
 import apiClient from '@/lib/apiClient';
 
 // ... (interfaces, constants, helpers remain the same) ...
-interface ImageItem { name: string; src: string; }
+interface ImageItem { name: string; src: string; thumbnail: string;}
 interface ImageCatalog { name: string; list: ImageItem[]; }
 interface ImageData { images: ImageCatalog[]; }
 const ITEMS_PER_PAGE = 24;
@@ -356,10 +356,10 @@ const handleLogout = async () => {
                    <div className="flex justify-center items-center space-x-1 h-32 p-2">
                        {/* Images */}
                        <div className="relative w-1/3 h-full">
-                           <Image src={catalog.list[0].src} alt={catalog.list[0].name} fill sizes="(max-width: 640px) 30vw, (max-width: 1024px) 20vw, 10vw" className="rounded-md object-cover" priority={index < ITEMS_PER_PAGE / 2} loading={index < ITEMS_PER_PAGE / 2 ? 'eager' : 'lazy'} />
+                           <Image src={catalog.list[0].thumbnail} alt={catalog.list[0].name} fill sizes="(max-width: 640px) 30vw, (max-width: 1024px) 20vw, 10vw" className="rounded-md object-cover" priority={index < ITEMS_PER_PAGE / 2} loading={index < ITEMS_PER_PAGE / 2 ? 'eager' : 'lazy'} />
                        </div>
-                       {catalog.list.length >= 3 && <div className="relative w-1/3 h-full"><Image src={catalog.list[Math.floor(catalog.list.length / 2)].src} alt={`${catalog.name} - Middle Preview`} fill sizes="(max-width: 640px) 30vw, (max-width: 1024px) 20vw, 10vw" className="rounded-md object-cover" loading="lazy" /></div>}
-                       {catalog.list.length >= 2 && <div className="relative w-1/3 h-full"><Image src={catalog.list[catalog.list.length - 1].src} alt={`${catalog.name} - Last Preview`} fill sizes="(max-width: 640px) 30vw, (max-width: 1024px) 20vw, 10vw" className="rounded-md object-cover" loading="lazy" /></div>}
+                       {catalog.list.length >= 3 && <div className="relative w-1/3 h-full"><Image src={catalog.list[Math.floor(catalog.list.length / 2)].thumbnail} alt={`${catalog.name} - Middle Preview`} fill sizes="(max-width: 640px) 30vw, (max-width: 1024px) 20vw, 10vw" className="rounded-md object-cover" loading="lazy" /></div>}
+                       {catalog.list.length >= 2 && <div className="relative w-1/3 h-full"><Image src={catalog.list[catalog.list.length - 1].thumbnail} alt={`${catalog.name} - Last Preview`} fill sizes="(max-width: 640px) 30vw, (max-width: 1024px) 20vw, 10vw" className="rounded-md object-cover" loading="lazy" /></div>}
                        {catalog.list.length < 3 && <div className="w-1/3 h-full bg-gray-100 rounded-md"></div>}
                        {catalog.list.length < 2 && <div className="w-1/3 h-full bg-gray-100 rounded-md"></div>}
                    </div>
