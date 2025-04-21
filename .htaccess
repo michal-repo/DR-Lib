@@ -1,26 +1,11 @@
-# ==============================================================================
-# Apache Configuration for Next.js Static Export (`output: 'export'`)
-# with basePath: /DR-Lib
-#
-# Place this file in the Apache Document Root (e.g., /var/www/html)
-# The exported Next.js site should be in a subdirectory named 'DR-Lib'
-# (e.g., /var/www/html/DR-Lib)
-# ==============================================================================
+<IfModule mod_rewrite.c>
+    RewriteEngine On
+    RewriteBase /DR-Lib
+    RewriteCond %{REQUEST_FILENAME} !-d
+    RewriteCond %{REQUEST_FILENAME}\.html -f
+    RewriteRule ^(.*)$ $1.html
+</IfModule>
 
-# Enable Rewrite Engine
-RewriteEngine On
-
-# Set the base path for relative rewrites (relative to DocumentRoot)
-# IMPORTANT: This assumes the .htaccess file is OUTSIDE the /DR-Lib directory.
-# If you place .htaccess INSIDE /DR-Lib, change RewriteBase to /
-RewriteBase /
-
-# ------------------------------------------------------------------------------
-# Force HTTPS (Recommended)
-# ------------------------------------------------------------------------------
-# Uncomment the following two lines if you want to force HTTPS
-# RewriteCond %{HTTPS} off
-# RewriteRule ^(.*)$ https://%{HTTP_HOST}%{REQUEST_URI} [L,R=301]
 
 # ------------------------------------------------------------------------------
 # Static Assets Caching (Optional but Recommended)
@@ -67,46 +52,3 @@ RewriteBase /
   # Content-Security-Policy needs careful configuration based on your app's needs
   # Header set Content-Security-Policy "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self';"
 </IfModule>
-
-# ------------------------------------------------------------------------------
-# Next.js Routing Rules for Static Export with basePath /DR-Lib
-# ------------------------------------------------------------------------------
-
-# 1. Prevent direct access to internal Next.js folders (if needed, often handled by server defaults)
-# RewriteRule ^DR-Lib/_next/ - [F,L]
-# RewriteRule ^DR-Lib/api/ - [F,L] # No API routes in static export
-
-# 2. Serve existing files and directories directly (within the basePath)
-# Check if the request URI maps to an existing file/dir within the DR-Lib folder
-RewriteCond %{DOCUMENT_ROOT}/DR-Lib/$1 -f [OR]
-RewriteCond %{DOCUMENT_ROOT}/DR-Lib/$1 -d
-RewriteRule ^DR-Lib/(.*)$ DR-Lib/$1 [L]
-
-# 3. Handle the root of the basePath -> /DR-Lib/index.html
-RewriteRule ^DR-Lib/?$ DR-Lib/index.html [L]
-
-# 4. Handle clean URLs (e.g., /DR-Lib/page -> /DR-Lib/page.html)
-# Check if the corresponding .html file exists within the DR-Lib folder
-RewriteCond %{REQUEST_FILENAME} !-f
-RewriteCond %{REQUEST_FILENAME} !-d
-RewriteCond %{DOCUMENT_ROOT}/DR-Lib/$1.html -f
-RewriteRule ^DR-Lib/([^/.]+)/?$ DR-Lib/$1.html [L]
-
-# 5. Handle nested clean URLs (e.g., /DR-Lib/path/to/page -> /DR-Lib/path/to/page.html)
-# This might be needed if you have nested pages. Adjust depth if necessary.
-RewriteCond %{REQUEST_FILENAME} !-f
-RewriteCond %{REQUEST_FILENAME} !-d
-RewriteCond %{DOCUMENT_ROOT}/DR-Lib/$1/$2.html -f
-RewriteRule ^DR-Lib/([^/.]+)/([^/.]+)/?$ DR-Lib/$1/$2.html [L]
-# Add more rules like this if you have deeper nesting
-
-# 6. Handle requests that weren't caught (likely need the 404 page)
-# Serve the custom 404 page located within the basePath
-RewriteCond %{REQUEST_FILENAME} !-f
-RewriteCond %{REQUEST_FILENAME} !-d
-RewriteRule ^DR-Lib/.*$ DR-Lib/404.html [L]
-
-# Optional: Redirect requests missing the basePath (if desired)
-# RewriteCond %{REQUEST_URI} !^/DR-Lib/
-# RewriteRule ^(.*)$ /DR-Lib/$1 [L,R=301] # Be careful with this, might cause loops if not configured right
-
