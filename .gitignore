@@ -41,5 +41,7 @@ next-env.d.ts
 
 .env.local
 .env
+.env.prod
+.env.dev
 
 .notes.txt
