@@ -168,7 +168,7 @@ const ImageModal: React.FC<ImageModalProps> = ({
             variant="ghost"
             size="icon"
             onClick={onClose}
-            className="p-1 bg-black bg-opacity-50 text-white rounded-full hover:bg-opacity-75 focus:outline-none focus:ring-2 focus:ring-white"
+            className="p-1 text-white rounded-full bg-gray-700 hover:bg-gray-600 focus:outline-none focus:ring-2 focus:ring-white"
             aria-label="Close image view"
           >
             <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
