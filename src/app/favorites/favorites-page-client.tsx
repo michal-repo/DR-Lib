@@ -108,6 +108,21 @@ const FavoritesPageClient = () => {
       }
   }, [currentGridFavorites.length, currentPage, totalPages, totalFavorites]);
 
+  // --- Effect to Sync Grid Page with Modal Navigation ---
+  useEffect(() => {
+    // If an image is selected (modal is open)
+    if (selectedImageIndex !== null && totalFavorites > 0) {
+      // Calculate the page number the selected image *should* be on
+      const pageForSelectedIndex = Math.floor(selectedImageIndex / FAVORITES_PER_PAGE) + 1;
+      // If the calculated page is different from the currently displayed grid page
+      if (pageForSelectedIndex !== currentPage) {
+        // Ensure the target page is valid
+        const validPage = Math.max(1, Math.min(pageForSelectedIndex, totalPages));
+        // Update the current grid page to match the modal's image
+        setCurrentPage(validPage);
+      }
+    }
+  }, [selectedImageIndex, currentPage, totalPages, totalFavorites]); // Re-run if selection, current page, total pages, or total items change
 
   // --- Pagination Event Handlers ---
   const handlePreviousPage = useCallback(() => {

@@ -74,6 +74,9 @@ const CatalogPageClient = () => {
   const [isLoggedIn, setIsLoggedIn] = useState<boolean | null>(null);
   const [favoriteUrls, setFavoriteUrls] = useState<Set<string>>(new Set()); // Store favorite 'src' URLs
   const [favoritesLoading, setFavoritesLoading] = useState(false); // Loading for subsequent favorite fetches/updates
+  
+  // State for the image details to be displayed in the modal
+  const [modalImageDetails, setModalImageDetails] = useState<{ src: string; thumbnail: string; } | null>(null);
 
   // Back link calculation remains the same
   const fromPageParam = searchParams.get('fromPage');
@@ -238,7 +241,32 @@ const CatalogPageClient = () => {
       }
     }
     // Uses the new constant from env/default indirectly via imageStartIndex calculation
-  }, [selectedImageGlobalIndex, currentImagePage, totalImagePages, totalItems]); // Re-run if selection, current page, or total pages change
+  }, [selectedImageGlobalIndex, currentImagePage, totalImagePages, totalItems]); // Re-run if selection, current page, total pages, or total items change
+
+  // Effect to update modal image details when selected image or relevant data changes
+  useEffect(() => {
+    if (selectedImageGlobalIndex === null) {
+      setModalImageDetails(null); // Clear details if modal is closed or no image selected
+      return;
+    }
+
+    // Calculate the page and index on that page for the globally selected image
+    const pageOfSelectedImage = Math.floor(selectedImageGlobalIndex / IMAGES_PER_PAGE) + 1;
+    const indexOnPageOfSelectedImage = selectedImageGlobalIndex % IMAGES_PER_PAGE;
+
+    // Check if the selected image is on the page currently loaded into `currentFiles`
+    if (pageOfSelectedImage === currentImagePage && 
+        currentFiles && 
+        indexOnPageOfSelectedImage >= 0 && 
+        indexOnPageOfSelectedImage < currentFiles.length) {
+      const file = currentFiles[indexOnPageOfSelectedImage];
+      if (file && file.src && file.thumbnail) { // Ensure file and its properties are valid
+        setModalImageDetails({ src: file.src, thumbnail: file.thumbnail });
+      }
+    }
+    // If the image is not on the currently loaded page (e.g., while `currentFiles` is updating for a new page),
+    // `modalImageDetails` retains its previous value. This keeps the modal open, showing the last valid image.
+  }, [selectedImageGlobalIndex, currentFiles, currentImagePage]); // IMAGES_PER_PAGE is a constant
 
   // --- Event Handlers ---
   const handlePreviousImagePage = useCallback(() => {
@@ -324,15 +352,9 @@ const CatalogPageClient = () => {
   // we only show the modal if the image *is* on the current page.
   // A more robust solution might require fetching the specific image data if needed.
   // Let's try the simpler approach first: derive from currentFiles if possible.
-
-  const selectedImageIndexOnPage = useMemo(() => {
-      if (selectedImageGlobalIndex === null) return null;
-      const index = selectedImageGlobalIndex - imageStartIndex;
-      return index >= 0 && index < currentFiles.length ? index : null;
-  }, [selectedImageGlobalIndex, imageStartIndex, currentFiles.length]);
-
-  const currentImageUrlForModal = selectedImageIndexOnPage !== null ? currentFiles[selectedImageIndexOnPage]?.src : null;
-  const currentImageThumbnailUrlForModal = selectedImageIndexOnPage !== null ? currentFiles[selectedImageIndexOnPage]?.thumbnail : null;
+  // The new `modalImageDetails` state and its accompanying `useEffect` handle this.
+  const currentImageUrlForModal = modalImageDetails?.src || null;
+  const currentImageThumbnailUrlForModal = modalImageDetails?.thumbnail || null;
   const hasPreviousImage = selectedImageGlobalIndex !== null && selectedImageGlobalIndex > 0;
   const hasNextImage = selectedImageGlobalIndex !== null && selectedImageGlobalIndex < totalItems - 1;
 
