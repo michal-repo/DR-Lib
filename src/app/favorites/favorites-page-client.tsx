@@ -11,12 +11,15 @@ import apiClient from '@/lib/apiClient';
 import { useToast } from '@/hooks/use-toast';
 import { usePagination, DOTS } from '@/hooks/usePagination';
 
-// Define the structure of a favorite item from the API
-interface FavoriteItem {
-  id: number;
-  file: string;
-  thumbnail: string;
-  created_at: string;
+// Updated interface to match FavoriteListItem from the OpenAPI spec
+interface FavoriteListItem {
+  id: number; // The ID of the favorite entry
+  created_at: string; // Timestamp when the favorite was created
+  reference_file_id: number; // The ID of the referenced file
+  file: string; // The source path of the referenced file (from reference_files.src)
+  thumbnail: string | null; // The thumbnail path of the referenced file
+  file_name: string; // The name of the referenced file
+  file_directory: string; // The directory of the referenced file
 }
 
 // --- Pagination Constants ---
@@ -28,7 +31,7 @@ const FavoritesPageClient = () => {
   const { toast } = useToast();
 
   const [isLoggedIn, setIsLoggedIn] = useState<boolean | null>(null);
-  const [favoritesList, setFavoritesList] = useState<FavoriteItem[]>([]);
+  const [favoritesList, setFavoritesList] = useState<FavoriteListItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [selectedImageIndex, setSelectedImageIndex] = useState<number | null>(null);
@@ -52,11 +55,12 @@ const FavoritesPageClient = () => {
         await apiClient('/check', { method: 'GET' }, true);
         setIsLoggedIn(true);
         try {
-          const result = await apiClient<{ data: FavoriteItem[] }>('/favorites', { method: 'GET' }, true);
-          // Ensure thumbnail exists or default to null/empty string if API doesn't provide it yet
+          // Expecting response structure { status: ..., data: FavoriteListItem[] }
+          // apiClient likely returns the 'data' part directly.
+          const result = await apiClient<{ data: FavoriteListItem[] }>('/favorites', { method: 'GET' }, true);
           const processedFavorites = (result.data || []).map(fav => ({
               ...fav,
-              thumbnail: fav.thumbnail || fav.file // Fallback to main file if thumbnail missing
+              thumbnail: fav.thumbnail || fav.file // Fallback to main file if thumbnail is null or missing
           }));
           setFavoritesList(processedFavorites);
           setCurrentPage(1); // Reset to page 1 when favorites are fetched/refetched
@@ -188,8 +192,9 @@ const FavoritesPageClient = () => {
 
   // --- Calculate Props for Modal ---
   const currentImageUrlForModal = selectedImageIndex !== null ? favoritesList[selectedImageIndex]?.file : null;
-  // --- MODIFIED: Get thumbnail URL for the modal ---
   const currentImageThumbnailUrlForModal = selectedImageIndex !== null ? favoritesList[selectedImageIndex]?.thumbnail : null;
+  // Pass reference_file_id to Modal, assuming Modal will use it for add/remove operations
+  const currentReferenceFileIdForModal = selectedImageIndex !== null ? favoritesList[selectedImageIndex]?.reference_file_id : undefined;
   const hasPreviousImage = selectedImageIndex !== null && selectedImageIndex > 0;
   const hasNextImage = selectedImageIndex !== null && selectedImageIndex < favoritesList.length - 1;
 
@@ -250,7 +255,7 @@ const FavoritesPageClient = () => {
                 {/* Grid */}
                 <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4 w-full max-w-7xl mb-8">
                 {currentGridFavorites.map((item, index) => {
-                    const imageName = item.file.split('/').pop() || `Favorite ${item.id}`;
+                    const imageName = item.file_name || item.file.split('/').pop() || `Favorite ${item.id}`;
                     return (
                     <button
                         key={item.id}
@@ -360,8 +365,8 @@ const FavoritesPageClient = () => {
       {/* --- Render Modal --- */}
        <ImageModal
         currentImageUrl={currentImageUrlForModal}
-        // --- MODIFIED: Pass the thumbnail URL to the modal ---
         currentImageThumbnailUrl={currentImageThumbnailUrlForModal}
+        currentReferenceFileId={currentReferenceFileIdForModal} // Pass the reference_file_id
         onClose={handleCloseModal}
         onPrevious={handleModalPrevious}
         onNext={handleModalNext}

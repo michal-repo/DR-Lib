@@ -21,6 +21,7 @@ interface ApiReferenceFile {
   corrupted: boolean;
   created_at: string;
   updated_at: string;
+  is_favorite: boolean; // Added new field from API
 }
 
 interface ApiReferenceFilesResponseData {
@@ -30,13 +31,6 @@ interface ApiReferenceFilesResponseData {
   size: number;
   totalPages: number;
   directoryFilter: string | null;
-}
-
-interface FavoriteItem {
-  id: number;
-  file: string; // This should match ApiReferenceFile.src
-  thumbnail: string;
-  created_at: string;
 }
 // --- End Interfaces ---
 
@@ -72,11 +66,15 @@ const CatalogPageClient = () => {
   const [selectedImageGlobalIndex, setSelectedImageGlobalIndex] = useState<number | null>(null); // Index in the *entire* catalog list
   // Auth and Favorites State
   const [isLoggedIn, setIsLoggedIn] = useState<boolean | null>(null);
-  const [favoriteUrls, setFavoriteUrls] = useState<Set<string>>(new Set()); // Store favorite 'src' URLs
-  const [favoritesLoading, setFavoritesLoading] = useState(false); // Loading for subsequent favorite fetches/updates
-  
+
   // State for the image details to be displayed in the modal
-  const [modalImageDetails, setModalImageDetails] = useState<{ src: string; thumbnail: string; } | null>(null);
+  interface ModalImageDetails {
+    src: string;
+    thumbnail: string;
+    id: number; // This will be reference_file_id (from ApiReferenceFile.id)
+    is_favorite: boolean; // To pass to the modal
+  }
+  const [modalImageDetails, setModalImageDetails] = useState<ModalImageDetails | null>(null);
 
   // Back link calculation remains the same
   const fromPageParam = searchParams.get('fromPage');
@@ -90,29 +88,9 @@ const CatalogPageClient = () => {
     return `/main${queryString ? `?${queryString}` : ''}`;
   }, [fromPageParam, searchParamQ]);
 
-  // --- Function to fetch favorites (remains the same logic, uses 'file' which matches 'src') ---
-  const fetchFavorites = useCallback(async () => {
-      if (!isLoggedIn) {
-          setFavoriteUrls(new Set());
-          return;
-      }
-      setFavoritesLoading(true);
-      try {
-          // Assuming the API returns favorites with a 'file' field matching the 'src' of reference files
-          const result = await apiClient<{ data: FavoriteItem[] }>('/favorites', { method: 'GET' }, true);
-          const urls = new Set(result.data?.map(fav => fav.file) || []);
-          setFavoriteUrls(urls);
-      } catch (favError: any) {
-          console.error("Failed to fetch favorites:", favError);
-          setFavoriteUrls(new Set());
-      } finally {
-          setFavoritesLoading(false);
-      }
-  }, [isLoggedIn]);
-
-  // --- Effect to Check Auth and Fetch Initial Favorites (remains the same) ---
+  // --- Effect to Check Auth Status ---
   useEffect(() => {
-    const checkAuthAndFetchInitial = async () => {
+    const checkAuth = async () => {
         setLoading(true); // Start global loading
         const token = getToken();
         let loggedIn = false;
@@ -125,49 +103,44 @@ const CatalogPageClient = () => {
             }
         }
         setIsLoggedIn(loggedIn);
-
-        if (loggedIn) {
-            await fetchFavorites(); // Fetch initial favorites
-        } else {
-            setFavoriteUrls(new Set());
-        }
         // setLoading(false) will happen after the *first* file fetch completes
     };
-    checkAuthAndFetchInitial();
-    // We only want this to run once on mount, subsequent favorite fetches are handled by fetchFavorites directly or triggered elsewhere if needed.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    checkAuth();
   }, []); // Run only once on mount
 
   // --- Effect to Fetch Reference Files from API ---
   useEffect(() => {
-    // Don't fetch if catalogName is missing
     if (!catalogName) {
         setError("Catalog parameter missing in URL.");
-        setLoading(false);
+        setLoading(false); // Ensure loading stops if no catalog name
         setCurrentFiles([]);
         setTotalItems(0);
         setApiTotalPages(0);
         return;
     };
 
+    // Wait until login status is determined
+    if (isLoggedIn === null) {
+        // setLoading(true); // Optional: ensure loading is true while waiting for auth
+        return; 
+    }
+
     const fetchReferenceFiles = async () => {
       setLoading(true); // Set loading true for each fetch triggered by page or catalog change
       setError(null);
-      // Clear previous results for the current page while loading new page
-      // setCurrentFiles([]); // Avoid clearing, looks better to keep old while loading new
 
       try {
         // Construct query parameters for the API call
         const queryParams = new URLSearchParams({
             page: currentImagePage.toString(),
             size: IMAGES_PER_PAGE.toString(),
-            catalog: catalogName, // Use the decoded catalog name for the 'catalog' parameter
+            catalog: catalogName,
         });
 
         const result = await apiClient<{ data: ApiReferenceFilesResponseData }>(
             `/reference-files?${queryParams.toString()}`,
             { method: 'GET' },
-            false // Public endpoint
+            isLoggedIn // Make call authenticated if user is logged in
         );
 
         if (result?.data) {
@@ -208,7 +181,7 @@ const CatalogPageClient = () => {
 
     fetchReferenceFiles();
 
-  }, [catalogName, currentImagePage]); // Refetch whenever catalogName or currentImagePage changes
+  }, [catalogName, currentImagePage, isLoggedIn]); // Refetch if isLoggedIn status changes
 
   // --- Pagination Logic ---
   // totalImagePages is now derived from apiTotalPages state, set by the API response.
@@ -261,7 +234,12 @@ const CatalogPageClient = () => {
         indexOnPageOfSelectedImage < currentFiles.length) {
       const file = currentFiles[indexOnPageOfSelectedImage];
       if (file && file.src && file.thumbnail) { // Ensure file and its properties are valid
-        setModalImageDetails({ src: file.src, thumbnail: file.thumbnail });
+        setModalImageDetails({ 
+          src: file.src, 
+          thumbnail: file.thumbnail, 
+          id: file.id,
+          is_favorite: file.is_favorite // Pass the favorite status
+        });
       }
     }
     // If the image is not on the currently loaded page (e.g., while `currentFiles` is updating for a new page),
@@ -313,19 +291,14 @@ const CatalogPageClient = () => {
      setSelectedImageGlobalIndex(prevIndex => (prevIndex === null || prevIndex >= totalItems - 1 ? totalItems - 1 : prevIndex + 1));
   };
 
-  // Callback for Modal Favorite Status Change (remains the same logic)
-  const handleFavoriteStatusChange = useCallback((imageUrl: string, isNowFavorite: boolean) => {
-      setFavoriteUrls(prevUrls => {
-          const newUrls = new Set(prevUrls);
-          if (isNowFavorite) {
-              newUrls.add(imageUrl);
-          } else {
-              newUrls.delete(imageUrl);
-          }
-          return newUrls;
-      });
-      // Optional: Refetch favorites if strict consistency is needed, but UI update is faster
-      // fetchFavorites();
+  // Callback for Modal Favorite Status Change
+  // Updates the is_favorite status of the specific file in currentFiles
+  const handleFavoriteStatusChange = useCallback((changedFileSrc: string, isNowFavorite: boolean) => {
+      setCurrentFiles(prevFiles =>
+          prevFiles.map(file =>
+              file.src === changedFileSrc ? { ...file, is_favorite: isNowFavorite } : file
+          )
+      );
   }, []);
 
   // Effect for Grid Arrow Key Navigation (uses totalImagePages)
@@ -355,6 +328,8 @@ const CatalogPageClient = () => {
   // The new `modalImageDetails` state and its accompanying `useEffect` handle this.
   const currentImageUrlForModal = modalImageDetails?.src || null;
   const currentImageThumbnailUrlForModal = modalImageDetails?.thumbnail || null;
+  const currentReferenceFileIdForModal = modalImageDetails?.id; // Get the ID for the modal
+  const initialIsFavoriteForModal = modalImageDetails?.is_favorite;
   const hasPreviousImage = selectedImageGlobalIndex !== null && selectedImageGlobalIndex > 0;
   const hasNextImage = selectedImageGlobalIndex !== null && selectedImageGlobalIndex < totalItems - 1;
 
@@ -407,8 +382,7 @@ const CatalogPageClient = () => {
         {/* Image Grid - Renders images from the current page */}
          <div className={`grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4 w-full max-w-7xl mb-8 ${loading ? 'opacity-50' : ''}`}>
           {currentFiles.map((file, indexOnPage) => {
-            // Check if the current image is a favorite using its 'src' URL
-            const isFavorite = isLoggedIn === true && favoriteUrls.has(file.src);
+            const isFavorite = file.is_favorite; // Use the new field directly
 
             return (
               <button
@@ -534,6 +508,7 @@ const CatalogPageClient = () => {
       {/* Render Modal - Pass data derived from the selected global index */}
        <ImageModal
         currentImageUrl={currentImageUrlForModal} // Use derived URL
+        currentReferenceFileId={currentReferenceFileIdForModal} // Pass the reference_file_id
         currentImageThumbnailUrl={currentImageThumbnailUrlForModal} // Pass derived thumbnail URL
         onClose={handleCloseModal}
         onPrevious={handleModalPrevious} // Uses global index logic
@@ -541,6 +516,7 @@ const CatalogPageClient = () => {
         hasPrevious={hasPreviousImage} // Based on global index
         hasNext={hasNextImage} // Based on global index
         isLoggedIn={isLoggedIn}
+        initialIsFavorite={initialIsFavoriteForModal} // Pass initial favorite state
         onFavoriteStatusChange={handleFavoriteStatusChange} // Pass the callback
       />
     </>

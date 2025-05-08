@@ -17,7 +17,9 @@ interface ImageModalProps {
   hasPrevious: boolean;
   hasNext: boolean;
   isLoggedIn: boolean | null;
-  onFavoriteStatusChange?: (imageUrl: string, isNowFavorite: boolean) => void; // <-- ADD THIS PROP
+  onFavoriteStatusChange?: (imageUrl: string, isNowFavorite: boolean) => void;
+  currentReferenceFileId?: number; // The ID of the reference file
+  initialIsFavorite?: boolean; // New prop for initial favorite state
 }
 
 const ImageModal: React.FC<ImageModalProps> = ({
@@ -30,56 +32,65 @@ const ImageModal: React.FC<ImageModalProps> = ({
   hasNext,
   isLoggedIn,
   onFavoriteStatusChange, // <-- Destructure the prop
+  currentReferenceFileId,
+  initialIsFavorite, // Destructure new prop
 }) => {
   const { toast } = useToast();
-  const [isFavorite, setIsFavorite] = useState<boolean | null>(null);
+  // Initialize with initialIsFavorite if provided, otherwise null to trigger fetch/check
+  const [isFavorite, setIsFavorite] = useState<boolean | null>(
+    initialIsFavorite !== undefined ? initialIsFavorite : null
+  );
   const [isTogglingFavorite, setIsTogglingFavorite] = useState(false);
 
   // --- Effect to Check Initial Favorite Status ---
   useEffect(() => {
-    // Reset status when image changes or user logs out/in
-    setIsFavorite(null);
-
-    // Only check if logged in and an image URL is present
-    if (isLoggedIn === true && currentImageUrl) {
+    // If initialIsFavorite is provided, use it and don't fetch.
+    if (initialIsFavorite !== undefined) {
+      setIsFavorite(initialIsFavorite);
+    } 
+    // Else, if logged in and have an ID, fetch the status (fallback or for other usages of modal)
+    else if (isLoggedIn === true && currentReferenceFileId) {
       const checkFavoriteStatus = async () => {
-        setIsFavorite(null); // Indicate checking state
+        setIsFavorite(null); // Set to null to indicate loading/checking state
         try {
-          const result = await apiClient<{ data: { isFavorite: boolean } }>(
-            `/favorites/check?file=${encodeURIComponent(currentImageUrl)}`,
+          const result = await apiClient<{ data: { isFavorite: boolean, reference_file_id: number } }>(
+            `/favorites/check?reference_file_id=${currentReferenceFileId}`,
             { method: 'GET' },
-            true // Authenticate this request
+            true 
           );
           setIsFavorite(result.data.isFavorite);
         } catch (error: any) {
-          // Don't show error toast for check failure, just assume not favorite
           console.error("Failed to check favorite status:", error);
           setIsFavorite(false); // Assume not favorite on error
-          // Handle 401 specifically? Maybe log out user? For now, just set false.
         }
       };
       checkFavoriteStatus();
     } else {
-        // If not logged in or no image, definitely not a favorite in this context
+        // If not logged in, or no ID, or initialIsFavorite not provided and not fetching, set to false.
         setIsFavorite(false);
     }
-  }, [currentImageUrl, isLoggedIn]); // Re-run when image or login status changes
+  }, [currentReferenceFileId, isLoggedIn, initialIsFavorite]); // Re-run if these change
 
   // --- Handler to Toggle Favorite Status ---
   const handleToggleFavorite = async (e: React.MouseEvent) => {
     e.stopPropagation();
 
-    if (!isLoggedIn || !currentImageUrl || !currentImageThumbnailUrl || isFavorite === null || isTogglingFavorite) {
+    if (!isLoggedIn || !currentImageUrl || !currentReferenceFileId || isFavorite === null || isTogglingFavorite) {
+      // currentImageThumbnailUrl is not strictly needed for the new API for add/remove,
+      // but currentImageUrl is used for the onFavoriteStatusChange callback.
       return;
     }
 
     setIsTogglingFavorite(true);
     const currentlyIsFavorite = isFavorite;
     const method = currentlyIsFavorite ? 'DELETE' : 'POST';
-    const fav_payload = currentlyIsFavorite ?  { file: currentImageUrl } : { file: currentImageUrl, thumbnail: currentImageThumbnailUrl };
+    // API now expects reference_file_id in the body for POST/DELETE
+    const fav_payload = { reference_file_id: currentReferenceFileId };
 
     try {
-      await apiClient(
+      // Response type for POST is FavoriteAddResponse, for DELETE is FavoriteRemoveResponse
+      // We don't strictly need to type the response here if we're not using its specific data fields
+      await apiClient<any>(
         '/favorites',
         { method: method, body: JSON.stringify(fav_payload) },
         true
@@ -92,7 +103,7 @@ const ImageModal: React.FC<ImageModalProps> = ({
       onFavoriteStatusChange?.(currentImageUrl, isNowFavorite); // <-- CALL CALLBACK
 
     } catch (error: any) {
-      // Error handling remains the same
+      // Error handling
       console.error("Failed to toggle favorite:", error);
       let errorMessage = currentlyIsFavorite ? "Could not remove favorite." : "Could not add favorite.";
       toast({ variant: "destructive", title: "Error", description: errorMessage });
@@ -223,4 +234,3 @@ const ImageModal: React.FC<ImageModalProps> = ({
 };
 
 export default ImageModal;
-
