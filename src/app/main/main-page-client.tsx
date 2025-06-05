@@ -352,7 +352,7 @@ const MainPageClient = () => {
   const noSearchResults = noResultsAfterLoad && !!lastUsedSearchQuery;
 
   return (
-    <main className="flex min-h-screen flex-col items-center p-6 pt-12 sm:p-12 md:p-24">
+    <main className="flex min-h-screen flex-col items-center p-6 pt-12 sm:p-12 md:p-6">
        {/* Header with Conditional Buttons */}
        <div className="w-full max-w-7xl flex justify-between items-center mb-8">
             <h1 className="text-4xl font-bold">Image Catalogs</h1>
@@ -368,6 +368,14 @@ const MainPageClient = () => {
                         Favorites
                     </Button>
                 )}
+                {/* Reference Files Button */}
+                <Button
+                    variant="outline"
+                    onClick={() => router.push('/references')}
+                    disabled={isLoggingOut || loading}
+                    >
+                    Reference Files
+                </Button>
                 {/* Login/Logout Button */}
                 {isLoggedIn === null ? (
                     <Button variant="outline" disabled>...</Button> // Auth check loading state
